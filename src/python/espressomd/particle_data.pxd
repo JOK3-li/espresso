@@ -1,5 +1,5 @@
 #
-# Copyright (C) 2013,2014 The ESPResSo project
+# Copyright (C) 2013,2014,2015,2016 The ESPResSo project
 #
 # This file is part of ESPResSo.
 #
@@ -93,6 +93,10 @@ cdef extern from "particle_data.hpp":
 
     IF ROTATION_PER_PARTICLE == 1:
         int set_particle_rotation(int part, int rot)
+
+    IF MULTI_TIMESTEP:
+        int set_particle_smaller_timestep(int part, int small_timestep)
+        void pointer_to_smaller_timestep(particle * p, int * & res)
 
     IF MASS:
         int set_particle_mass(int part, double mass)
@@ -213,3 +217,10 @@ cdef class ParticleHandle(object):
     cdef bint valid
     cdef particle particle_data
     cdef int update_particle_data(self) except -1
+
+
+cdef class ParticleSlice:
+
+    cdef particle particle_data
+    cdef int update_particle_data(self,id) except -1
+    cdef public id_selection

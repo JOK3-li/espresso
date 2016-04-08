@@ -1,5 +1,5 @@
 /*
-  Copyright (C) 2010,2011,2012,2013,2014 The ESPResSo project
+  Copyright (C) 2010,2011,2012,2013,2014,2015,2016 The ESPResSo project
   Copyright (C) 2002,2003,2004,2005,2006,2007,2008,2009,2010 
     Max-Planck-Institute for Polymer Research, Theory Group
   
@@ -239,24 +239,6 @@ void predict_momentum_particles(double *result)
   MPI_Reduce(momentum, result, 3, MPI_DOUBLE, MPI_SUM, 0, comm_cart);
 }
 
-/** Calculate total momentum of the system (particles & LB fluid)
- * @param momentum Result for this processor (Output)
- */
-void momentum_calc(double *momentum) 
-{
-    double momentum_fluid[3] = { 0., 0., 0. };
-    double momentum_particles[3] = { 0., 0., 0. };
-
-    mpi_gather_stats(4, momentum_particles, NULL, NULL, NULL);
-#ifdef LB
-    mpi_gather_stats(6, momentum_fluid, NULL, NULL, NULL);
-#endif
-
-    momentum[0] = momentum_fluid[0] + momentum_particles[0];
-    momentum[1] = momentum_fluid[1] + momentum_particles[1];
-    momentum[2] = momentum_fluid[2] + momentum_particles[2];
-
-}
 
 /** Calculate total momentum of the system (particles & LB fluid)
  * inputs are bools to include particles and fluid in the linear momentum calculation
@@ -273,13 +255,20 @@ std::vector<double> calc_linear_momentum(int include_particles, int include_lbfl
       linear_momentum[2] += momentum_particles[2];
     }
     if (include_lbfluid) {
-#ifdef LB
       double momentum_fluid[3] = { 0., 0., 0. };
-      mpi_gather_stats(6, momentum_fluid, NULL, NULL, NULL);
+#ifdef LB
+      if(lattice_switch & LATTICE_LB) {
+        mpi_gather_stats(6, momentum_fluid, NULL, NULL, NULL);
+      }
+#endif
+#ifdef LB_GPU
+      if(lattice_switch & LATTICE_LB_GPU) {
+        lb_calc_fluid_momentum_GPU(momentum_fluid);
+      }
+#endif
       linear_momentum[0] += momentum_fluid[0];
       linear_momentum[1] += momentum_fluid[1];
       linear_momentum[2] += momentum_fluid[2];
-#endif
     }
     return linear_momentum;
 }
@@ -349,7 +338,7 @@ void angularmomentum(int type, double *com)
   return;
 }
 
-void  momentofinertiamatrix(int type, double *MofImatrix)
+void momentofinertiamatrix(int type, double* MofImatrix)
 {
   int i,j,count;
   double p1[3],massi;
@@ -380,17 +369,17 @@ void  momentofinertiamatrix(int type, double *MofImatrix)
   return;
 }
 
-void calc_gyration_tensor(int type, double **_gt)
+void calc_gyration_tensor(int type, std::vector<double>& gt)
 {
   int i, j, count;
   std::vector<double> com (3);
   double eva[3],eve0[3],eve1[3],eve2[3];
-  double *gt=NULL, tmp;
+  double tmp;
   double Smatrix[9],p1[3];
 
   for (i=0; i<9; i++) Smatrix[i] = 0;
   /* 3*ev, rg, b, c, kappa, eve0[3], eve1[3], eve2[3]*/
-  *_gt = gt = (double*)Utils::realloc(gt,16*sizeof(double)); 
+  gt.resize(16);
 
   updatePartCfg(WITHOUT_BONDS);
 
@@ -1421,9 +1410,7 @@ void analyze_activate(int ind) {
     pos[1] = configs[ind][3*i+1];
     pos[2] = configs[ind][3*i+2];
     if (place_particle(i, pos)==ES_ERROR) {
-        ostringstream msg;
-        msg <<"failed upon replacing particle " << i << "  in Espresso";
-        runtimeError(msg);
+        runtimeErrorMsg() <<"failed upon replacing particle " << i << "  in Espresso";
     }
   }
 }
