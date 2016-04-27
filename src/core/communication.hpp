@@ -374,6 +374,12 @@ void mpi_recv_part(int node, int part, Particle *part_data);
 */
 int mpi_integrate(int n_steps, int reuse_forces);
 
+/** Issue REQ_INTEGRATE_sd: start SD integrator.
+    @param n_steps how many steps to do.
+    @return nonzero on error
+*/
+int mpi_integrate_sd(int n_steps);
+
 /** Issue REQ_MIN_ENERGY: start energy minimization.    
     @return nonzero on error
  */

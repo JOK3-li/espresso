@@ -358,129 +358,131 @@ void propagate_pos_sd()
   int c, i, np;
   //get total number of particles
   int N=sd_get_particle_num();
-  // gather all the data for mobility calculation
-  real * pos=NULL;
-  pos=(real *)Utils::malloc(DIM*N*sizeof(double));
-  assert(pos!=NULL);
-  real * force=NULL;
-  force=(real *)Utils::malloc(DIM*N*sizeof(double));
-  assert(force!=NULL);
-  real * velocity=NULL;
-  velocity=(real *)Utils::malloc(DIM*N*sizeof(real));
-  assert(velocity!=NULL);
+  if (N > 0){
+    // gather all the data for mobility calculation
+    real * pos=NULL;
+    pos=(real *)Utils::malloc(DIM*N*sizeof(double));
+    assert(pos!=NULL);
+    real * force=NULL;
+    force=(real *)Utils::malloc(DIM*N*sizeof(double));
+    assert(force!=NULL);
+    real * velocity=NULL;
+    velocity=(real *)Utils::malloc(DIM*N*sizeof(real));
+    assert(velocity!=NULL);
 #ifdef EXTERNAL_FORCES
-  const int COORD_ALL=COORD_FIXED(0)&COORD_FIXED(1)&COORD_FIXED(2);
+    const int COORD_ALL=COORD_FIXED(0)&COORD_FIXED(1)&COORD_FIXED(2);
 #endif
-  int j=0; // total particle counter
-  for (c = 0; c < local_cells.n; c++){
-    cell = local_cells.cell[c];
-    p    = cell->part;
-    np   = cell->n;
-    for (i = 0; i < np; i++) { // only count nonVirtual Particles
+    int j=0; // total particle counter
+    for (c = 0; c < local_cells.n; c++){
+      cell = local_cells.cell[c];
+      p    = cell->part;
+      np   = cell->n;
+      for (i = 0; i < np; i++) { // only count nonVirtual Particles
 #ifdef EXTERNAL_FORCES
-      if (p[i].p.ext_flag & COORD_ALL)
-	{
-	  fprintf (stderr, "Warning: Fixing particle in StokesDynamics this way with EXTERNAL_FORCES is not possible (and will be ignored). Please try to bind them e.g. harmonicaly.\n");
-	}
+        if (p[i].p.ext_flag & COORD_ALL)
+          {
+            fprintf (stderr, "Warning: Fixing particle in StokesDynamics this way with EXTERNAL_FORCES is not possible (and will be ignored). Please try to bind them e.g. harmonicaly.\n");
+          }
 #endif
 #ifdef  VIRTUAL_SITES
-      if (!ifParticleIsVirtual(&p[i]))
+        if (!ifParticleIsVirtual(&p[i]))
 #endif
-      {
+          {
 #ifdef SD_USE_FLOAT
-	for (int d=0;d<3;d++){
-	  pos[3*j+d]        = p[i].r.p[d];
-	  pos[3*j+d]        -=rint(pos[3*j+d]/box_l[d])*box_l[d];
-	  force[3*j+d]      = p[i].f.f[d];
-	}
+            for (int d=0;d<3;d++){
+              pos[3*j+d]        = p[i].r.p[d];
+              pos[3*j+d]        -=rint(pos[3*j+d]/box_l[d])*box_l[d];
+              force[3*j+d]      = p[i].f.f[d];
+            }
 #else
-        memmove(&pos[3*j], p[i].r.p, 3*sizeof(double));
-        memmove(&force[3*j], p[i].f.f, 3*sizeof(double));
-	for (int d=0;d<3;d++){
-	  pos[3*j+d]        -=rint(pos[3*j+d]/box_l[d])*box_l[d];
-	}
+            memmove(&pos[3*j], p[i].r.p, 3*sizeof(double));
+            memmove(&force[3*j], p[i].f.f, 3*sizeof(double));
+            for (int d=0;d<3;d++){
+              pos[3*j+d]        -=rint(pos[3*j+d]/box_l[d])*box_l[d];
+            }
 #endif
-	j++;
+            j++;
+          }
       }
     }
-  }
-  if (!(thermo_switch & THERMO_SD) && thermo_switch & THERMO_BD){
-    propagate_pos_bd(N,pos,force, velocity);
-  } else {
-    // cuda part
+    if (!(thermo_switch & THERMO_SD) && thermo_switch & THERMO_BD){
+      propagate_pos_bd(N,pos,force, velocity);
+    } else {
+      // cuda part
 #ifdef CUDA
-    //void propagate_pos_sd_cuda(double * box_l_h, int N,double * pos_h, double * force_h, double * velo_h){
+      //void propagate_pos_sd_cuda(double * box_l_h, int N,double * pos_h, double * force_h, double * velo_h){
 #ifdef SD_USE_FLOAT
-    real box_size[3];
-    for (int d=0;d<3;d++){
-      box_size[d]=box_l[d];
-    }
+      real box_size[3];
+      for (int d=0;d<3;d++){
+        box_size[d]=box_l[d];
+      }
 #else
-    real * box_size = box_l;
+      real * box_size = box_l;
 #endif
-    if (!(thermo_switch & THERMO_SD)){
-      temperature*=-1;
-    }
-  propagate_pos_sd_cuda(box_size,N,pos,force, velocity);
-  if (!(thermo_switch & THERMO_SD)){
-    temperature*=-1;
-  }
+      if (!(thermo_switch & THERMO_SD)){
+        temperature*=-1;
+      }
+      propagate_pos_sd_cuda(box_size,N,pos,force, velocity);
+      if (!(thermo_switch & THERMO_SD)){
+        temperature*=-1;
+      }
 #else
-  fprintf(stderr, "Warning - CUDA is currently required for SD\n");
-  fprintf(stderr, "So i am just sitting here and copying stupidly stuff :'(\n");
+      fprintf(stderr, "Warning - CUDA is currently required for SD\n");
+      fprintf(stderr, "So i am just sitting here and copying stupidly stuff :'(\n");
 #endif
-}
+    }
+    
   
-
 #ifdef NEMD
-  /* change momentum of each particle in top and bottom slab */
-  fprintf (stderr, "Warning: NEMD is in SD not supported.\n");
+    /* change momentum of each particle in top and bottom slab */
+    fprintf (stderr, "Warning: NEMD is in SD not supported.\n");
 #endif
-  j=0;
-  for (c = 0; c < local_cells.n; c++) {
-    cell = local_cells.cell[c];
-    p    = cell->part;
-    np   = cell->n;
-    for (i = 0; i < np; i++) {
+    j=0;
+    for (c = 0; c < local_cells.n; c++) {
+      cell = local_cells.cell[c];
+      p    = cell->part;
+      np   = cell->n;
+      for (i = 0; i < np; i++) {
 #ifdef VIRTUAL_SITES
-      if (ifParticleIsVirtual(&p[i])) continue;
+        if (ifParticleIsVirtual(&p[i])) continue;
 #endif
-      // write back of position and velocity data
+        // write back of position and velocity data
 #ifdef SD_USE_FLOAT
-      for (int d=0;d<3;d++){
-	p[i].r.p[d] = pos[3*j+d]+box_l[d]*rint(p[i].r.p[d]/box_l[d]);
-	p[i].m.v[d] = velocity[3*j+d];
-	//p[i].f.f[d] *= (0.5*time_step*time_step)/(*part).p.mass;
-      }
+        for (int d=0;d<3;d++){
+          p[i].r.p[d] = pos[3*j+d]+box_l[d]*rint(p[i].r.p[d]/box_l[d]);
+          p[i].m.v[d] = velocity[3*j+d];
+          //p[i].f.f[d] *= (0.5*time_step*time_step)/(*part).p.mass;
+        }
 #else
-      for (int d=0;d<3;d++){
-	p[i].r.p[d] = pos[3*j+d]+box_l[d]*rint(p[i].r.p[d]/box_l[d]);
-      }
-      memmove(p[i].m.v, &velocity[DIM*j], 3*sizeof(double));
+        for (int d=0;d<3;d++){
+          p[i].r.p[d] = pos[3*j+d]+box_l[d]*rint(p[i].r.p[d]/box_l[d]);
+        }
+        memmove(p[i].m.v, &velocity[DIM*j], 3*sizeof(double));
 #endif
-      // somehow this does not effect anything, although it is called ...
-      for (int d=0;d<3;d++){
-	p[i].f.f[d] *= (0.5*time_step*time_step)/(*p).p.mass;
-      }
-      for (int d=0;d<DIM;d++){
-        assert(!isnan(pos[DIM*i+d]));
-      }
-      j++;
-      ONEPART_TRACE(if(p[i].p.identity==check_id) fprintf(stderr,"%d: OPT: PV_1 v_new = (%.3e,%.3e,%.3e)\n",this_node,p[i].m.v[0],p[i].m.v[1],p[i].m.v[2]));
-      ONEPART_TRACE(if(p[i].p.identity==check_id) fprintf(stderr,"%d: OPT: PPOS p = (%.3f,%.3f,%.3f)\n",this_node,p[i].r.p[0],p[i].r.p[1],p[i].r.p[2]));
-   
-
+        // somehow this does not effect anything, although it is called ...
+        for (int d=0;d<3;d++){
+          p[i].f.f[d] *= (0.5*time_step*time_step)/(*p).p.mass;
+        }
+        for (int d=0;d<DIM;d++){
+          assert(!isnan(pos[DIM*i+d]));
+        }
+        j++;
+        ONEPART_TRACE(if(p[i].p.identity==check_id) fprintf(stderr,"%d: OPT: PV_1 v_new = (%.3e,%.3e,%.3e)\n",this_node,p[i].m.v[0],p[i].m.v[1],p[i].m.v[2]));
+        ONEPART_TRACE(if(p[i].p.identity==check_id) fprintf(stderr,"%d: OPT: PPOS p = (%.3f,%.3f,%.3f)\n",this_node,p[i].r.p[0],p[i].r.p[1],p[i].r.p[2]));
+        
+        
 #ifdef ROTATION
-      propagate_omega_quat_particle(&p[i]);
+        propagate_omega_quat_particle(&p[i]);
 #endif
-
-      /* Verlet criterion check */
-      if(distance2(p[i].r.p,p[i].l.p_old) > skin2 ) resort_particles = 1;
+        
+        /* Verlet criterion check */
+        if(distance2(p[i].r.p,p[i].l.p_old) > skin2 ) resort_particles = 1;
+      }
     }
+    free(pos);
+    free(force);
+    free(velocity);
   }
-  free(pos);
-  free(force);
-  free(velocity);
   announce_resort_particles();
 }
 

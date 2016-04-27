@@ -74,6 +74,7 @@
 #include "minimize_energy.hpp"
 #include "scafacos.hpp"
 #include "mpiio.hpp"
+#include "integrate_sd.hpp"
 
 using namespace std;
 
@@ -99,6 +100,7 @@ static int terminated = 0;
   CB(mpi_send_bond_slave) \
   CB(mpi_recv_part_slave) \
   CB(mpi_integrate_slave) \
+  CB(mpi_integrate_sd_slave) \
   CB(mpi_bcast_ia_params_slave) \
   CB(mpi_bcast_n_particle_types_slave) \
   CB(mpi_gather_stats_slave) \
@@ -1406,6 +1408,27 @@ void mpi_integrate_slave(int n_steps, int reuse_forces)
   integrate_vv(n_steps, reuse_forces);
   COMM_TRACE(fprintf(stderr, "%d: integration for %d n_steps with %d reuse_forces done.\n", this_node, n_steps, reuse_forces));
 }
+
+#if defined(BD)|| defined(SD)
+int mpi_integrate_sd(int n_steps){
+  mpi_call(mpi_integrate_sd_slave,n_steps,0);
+  integrate_sd(n_steps);
+  COMM_TRACE(fprintf(stderr, "%d: integration task %d done.\n", \
+                     this_node, n_steps));
+  return mpi_check_runtime_errors();
+}
+
+void mpi_integrate_sd_slave(int n_steps, int fu){
+  if (thermo_switch & THERMO_SD ){
+    fprintf(stderr, "%d: SD with MPI not supported!\n", this_node);
+    errexit();
+  }
+  integrate_sd(n_steps);
+  COMM_TRACE(fprintf(stderr, "%d: integration (BD) for %d n_steps done.\n", \
+                     this_node, n_steps));
+}
+#endif
+
 
 /*************** REQ_BCAST_IA ************/
 void mpi_bcast_ia_params(int i, int j)

@@ -26,6 +26,7 @@
 */
 
 #include "integrate_sd.hpp"
+#include "communication.hpp"
 #include "npt.hpp"
 #include "interaction_data.hpp"
 #include "lb.hpp"
@@ -151,15 +152,15 @@ int tclcommand_integrate_sd(ClientData data, Tcl_Interp *interp, int argc, char 
   }
   /* perform integration */
   if (!correlations_autoupdate && !observables_autoupdate) {
-    integrate_sd(n_steps);
+    mpi_integrate_sd(n_steps);
   } else  {
     for (int i=0; i<n_steps; i++) {
-      integrate_sd(1);
+      mpi_integrate_sd(1);
       autoupdate_observables();
       autoupdate_correlations();
     }
     if (n_steps == 0){
-      integrate_sd(0);
+      mpi_integrate_sd(0);
     }
   }
   ;
